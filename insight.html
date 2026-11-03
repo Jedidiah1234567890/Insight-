@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Insight</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+:root{--bg:#000;--panel:#111;--text:#f2f2f2;--muted:#8a8a8a;--accent:#7c5cff;--mine:#2a1f57;--theirs:#1a1a1a}
+[data-theme="midnight"]{--bg:#050b1a;--panel:#0b1530;--text:#e8edff;--muted:#7a88b5;--accent:#4f8bff;--mine:#1d3a7a;--theirs:#101b38}
+[data-theme="forest"]{--bg:#06110a;--panel:#0c1f14;--text:#e6f5ec;--muted:#7fa890;--accent:#34c77b;--mine:#17503a;--theirs:#112b1f}
+[data-theme="rose"]{--bg:#120508;--panel:#210c12;--text:#fbe9ee;--muted:#b98a98;--accent:#ff5c8a;--mine:#5a1d31;--theirs:#2b1119}
+[data-theme="paper"]{--bg:#f4efe6;--panel:#e9e2d4;--text:#2a2118;--muted:#7a6d5a;--accent:#b5652b;--mine:#d9c7a6;--theirs:#fbf8f2}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px);display:flex;flex-direction:column}
+header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 16px;background:var(--panel)}
+header h1{font-size:18px;margin:0;color:var(--accent)}
+select,input,textarea,button{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--muted);border-radius:10px;padding:10px}
+button{background:var(--accent);color:#fff;border:none;cursor:pointer}
+button.ghost{background:var(--panel);color:var(--text);border:1px solid var(--muted)}
+button.danger{background:#8b1e1e}
+input,textarea{width:100%;margin:6px 0}
+textarea{min-height:70px}
+main{flex:1;overflow:auto;padding:12px;min-height:0}
+.note{color:var(--muted);font-size:13px}
+.row{display:flex;gap:8px;align-items:center}
+.card{display:block;width:100%;text-align:left;background:var(--panel);color:var(--text);margin:6px 0}
+#chat{display:flex;flex-direction:column;height:100%}
+#messages{flex:1;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:8px 0;min-height:200px}
+.bubble{max-width:80%;padding:10px 12px;border-radius:14px;word-wrap:break-word;white-space:pre-wrap}
+.bubble img{max-width:100%;border-radius:10px;display:block}
+.bubble audio{max-width:220px}
+.me{align-self:flex-end;background:var(--mine)}
+.them{align-self:flex-start;background:var(--theirs)}
+.sticker{font-size:48px;background:none}
+#stickers{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;padding:8px;background:var(--panel);border-radius:12px;margin-bottom:8px}
+#stickers button{background:none;font-size:26px;padding:4px}
+.composer{display:flex;gap:6px;align-items:center;padding:8px 0}
+.composer input{flex:1;margin:0}
+.composer button,.attach{padding:10px 12px}
+.attach{background:var(--panel);color:var(--text);border:1px solid var(--muted);border-radius:10px;cursor:pointer}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <h1>Insight</h1>
+  <select id="theme" aria-label="Theme">
+    <option value="black">Black</option>
+    <option value="midnight">Midnight</option>
+    <option value="forest">Forest</option>
+    <option value="rose">Rose</option>
+    <option value="paper">Paper</option>
+  </select>
+</header>
+<main>
+  <section id="home">
+    <h3>Your key</h3>
+    <p class="note">Send this to a contact so they can add you. It is public, so sharing it is safe.</p>
+    <textarea id="myKey" readonly></textarea>
+    <div class="row"><button id="copyKey">Copy my key</button><button class="ghost" id="newId">New identity</button></div>
+    <h3>Add a contact</h3>
+    <input id="cName" placeholder="Name">
+    <textarea id="cKey" placeholder="Paste their key"></textarea>
+    <button id="addContact">Add contact</button>
+    <h3>Contacts</h3>
+    <div id="contacts"></div>
+    <h3>About</h3>
+    <p class="note">Calls are not included yet because they need a relay server. Messages move as encrypted packets that you copy into any app. Chats are stored only in this browser. Needs HTTPS to work.</p>
+    <button class="danger" id="wipe">Erase all data</button>
+  </section>
+  <section id="chat" class="hidden">
+    <div class="row" style="margin-bottom:8px"><button class="ghost" id="back">←</button><strong id="chatName"></strong></div>
+    <div id="messages"></div>
+    <div id="stickers" class="hidden"></div>
+    <div class="composer">
+      <button class="ghost" id="stickerBtn">🙂</button>
+      <label class="attach">📎<input type="file" id="imgIn" accept="image/*" class="hidden"></label>
+      <button class="ghost" id="recBtn">🎙</button>
+      <input id="text" placeholder="Message">
+      <button id="sendBtn">Send</button>
+    </div>
+    <div id="outbox" class="hidden">
+      <p class="note">Packet ready. Copy it and paste it into any app to send.</p>
+      <textarea id="packetOut" readonly></textarea>
+      <button id="copyPacket">Copy packet</button>
+    </div>
+    <p class="note">Received a packet? Paste it here.</p>
+    <textarea id="packetIn"></textarea>
+    <button id="openPacket" class="ghost">Open packet</button>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const KEY = 'vault.v1';
+const EPOCH_MS = 6 * 3600 * 1000;
+const enc = new TextEncoder(), dec = new TextDecoder();
+const ECDH = { name: 'ECDH', namedCurve: 'P-256' };
+const STICKERS = ['😀','😂','😍','🥳','😎','🔥','❤️','🌙','⭐','🌸','🐱','🎉','🙏','👍','🌈','🦋','🍀','💜'];
+let db = load(), active = null, keyCache = new Map(), rec = null, chunks = [];
+
+function load() {
+  try { const d = JSON.parse(localStorage.getItem(KEY)); if (d) return d; } catch (e) {}
+  return { me: null, contacts: {}, chats: {}, theme: 'black' };
+}
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(db)); }
+  catch (e) { alert('Storage is full. Delete some voice notes or images.'); }
+}
+function b64(buf) {
+  const u = new Uint8Array(buf); let s = '';
+  for (let i = 0; i < u.length; i++) s += String.fromCharCode(u[i]);
+  return btoa(s);
+}
+function unb64(s) {
+  const bin = atob(s), u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return u;
+}
+function showErr(e) { alert(e && e.message ? e.message : String(e)); }
+
+// Identity
+async function newIdentity() {
+  const kp = await crypto.subtle.generateKey(ECDH, true, ['deriveBits']);
+  db.me = {
+    priv: await crypto.subtle.exportKey('jwk', kp.privateKey),
+    pub: await crypto.subtle.exportKey('jwk', kp.publicKey)
+  };
+  db.contacts = {}; db.chats = {}; keyCache = new Map(); active = null;
+  save();
+}
+function myKeyString() { return 'INSIGHT-KEY.' + btoa(JSON.stringify(db.me.pub)); }
+function parseKeyString(s) {
+  s = s.trim();
+  if (!s.startsWith('INSIGHT-KEY.')) throw new Error('That is not an Insight key.');
+  let jwk;
+  try { jwk = JSON.parse(atob(s.slice(12))); } catch (e) { throw new Error('That key is damaged.'); }
+  if (jwk.kty !== 'EC' || jwk.crv !== 'P-256') throw new Error('Unsupported key.');
+  return jwk;
+}
+
+// Key agreement and per-epoch encryption
+async function sharedSecret(theirPub) {
+  const priv = await crypto.subtle.importKey('jwk', db.me.priv, ECDH, false, ['deriveBits']);
+  const pub = await crypto.subtle.importKey('jwk', theirPub, ECDH, false, []);
+  return b64(await crypto.subtle.deriveBits({ name: 'ECDH', public: pub }, priv, 256));
+}
+async function epochKey(secretB64, epoch) {
+  const cacheKey = secretB64 + '|' + epoch;
+  if (keyCache.has(cacheKey)) return keyCache.get(cacheKey);
+  const base = await crypto.subtle.importKey('raw', unb64(secretB64), 'HKDF', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey(
+    { name: 'HKDF', hash: 'SHA-256', salt: enc.encode('insight'), info: enc.encode('epoch-' + epoch) },
+    base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+  );
+  keyCache.set(cacheKey, key);
+  return key;
+}
+async function seal(contact, payload) {
+  const epoch = Math.floor(Date.now() / EPOCH_MS);
+  const key = await epochKey(contact.secret, epoch);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(JSON.stringify(payload)));
+  return 'INSIGHT1.' + btoa(JSON.stringify({ e: epoch, i: b64(iv), c: b64(ct) }));
+}
+async function openPacket(text) {
+  const s = text.trim();
+  if (!s.startsWith('INSIGHT1.')) throw new Error('Not an Insight packet.');
+  let env;
+  try { env = JSON.parse(atob(s.slice(9))); } catch (e) { throw new Error('Packet is damaged.'); }
+  for (const id of Object.keys(db.contacts)) {
+    try {
+      const key = await epochKey(db.contacts[id].secret, env.e);
+      const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(env.i) }, key, unb64(env.c));
+      return { id, payload: JSON.parse(dec.decode(pt)) };
+    } catch (e) {}
+  }
+  throw new Error('No contact could open this packet. Add the sender first, and check the packet is complete.');
+}
+
+// Contacts
+async function addContact() {
+  const name = $('cName').value.trim() || 'Contact';
+  const pub = parseKeyString($('cKey').value);
+  if (pub.x === db.me.pub.x && pub.y === db.me.pub.y) throw new Error('That is your own key.');
+  const secret = await sharedSecret(pub);
+  const id = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  db.contacts[id] = { name, pub, secret };
+  db.chats[id] = [];
+  save();
+  $('cName').value = ''; $('cKey').value = '';
+  renderContacts();
+}
+function renderContacts() {
+  const box = $('contacts'); box.innerHTML = '';
+  const ids = Object.keys(db.contacts);
+  if (!ids.length) { box.innerHTML = '<p class="note">No contacts yet.</p>'; return; }
+  for (const id of ids) {
+    const b = document.createElement('button');
+    b.className = 'card'; b.textContent = db.contacts[id].name;
+    b.onclick = () => openChat(id);
+    box.appendChild(b);
+  }
+}
+
+// Chat
+function openChat(id) {
+  active = id;
+  $('home').classList.add('hidden'); $('chat').classList.remove('hidden');
+  $('chatName').textContent = db.contacts[id].name;
+  $('outbox').classList.add('hidden');
+  renderMessages();
+}
+function goHome() {
+  active = null;
+  $('chat').classList.add('hidden'); $('home').classList.remove('hidden');
+  renderContacts();
+}
+function renderMessages() {
+  const box = $('messages'); box.innerHTML = '';
+  for (const m of db.chats[active] || []) {
+    const p = m.payload, d = document.createElement('div');
+    d.className = 'bubble ' + (m.from === 'me' ? 'me' : 'them');
+    if (p.t === 'sticker') { d.classList.add('sticker'); d.textContent = String(p.b); }
+    else if (p.t === 'image' && /^data:image\//.test(p.b)) { const im = new Image(); im.src = p.b; d.appendChild(im); }
+    else if (p.t === 'voice' && /^data:audio\//.test(p.b)) { const a = document.createElement('audio'); a.controls = true; a.src = p.b; d.appendChild(a); }
+    else if (p.t === 'text') { d.textContent = String(p.b); }
+    else d.textContent = '[unsupported message]';
+    box.appendChild(d);
+  }
+  box.scrollTop = box.scrollHeight;
+}
+async function sendPayload(payload) {
+  const packet = await seal(db.contacts[active], payload);
+  (db.chats[active] = db.chats[active] || []).push({ from: 'me', payload, ts: Date.now() });
+  save(); renderMessages();
+  $('packetOut').value = packet;
+  $('outbox').classList.remove('hidden');
+}
+async function shrinkImage(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image(); img.src = url; await img.decode();
+    const s = Math.min(1, 1024 / Math.max(img.width, img.height));
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(img.width * s); cv.height = Math.round(img.height * s);
+    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+    return cv.toDataURL('image/jpeg', 0.8);
+  } finally { URL.revokeObjectURL(url); }
+}
+async function copyText(t, msg) {
+  try { await navigator.clipboard.writeText(t); alert(msg); }
+  catch (e) { alert('Select the text and copy it manually.'); }
+}
+
+// Init and events
+function setTheme(t) {
+  document.documentElement.dataset.theme = t === 'black' ? '' : t;
+  db.theme = t; save();
+}
+function refreshKey() { $('myKey').value = myKeyString(); }
+
+$('sendBtn').onclick = () => {
+  const t = $('text').value.trim(); if (!t || !active) return;
+  $('text').value = '';
+  sendPayload({ t: 'text', b: t }).catch(showErr);
+};
+$('text').addEventListener('keydown', e => { if (e.key === 'Enter') $('sendBtn').click(); });
+
+STICKERS.forEach(s => {
+  const b = document.createElement('button');
+  b.textContent = s;
+  b.onclick = () => { $('stickers').classList.add('hidden'); sendPayload({ t: 'sticker', b: s }).catch(showErr); };
+  $('stickers').appendChild(b);
+});
+$('stickerBtn').onclick = () => $('stickers').classList.toggle('hidden');
+
+$('imgIn').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f || !active) return;
+  try { await sendPayload({ t: 'image', b: await shrinkImage(f) }); } catch (err) { showErr(err); }
+};
+
+$('recBtn').onclick = async () => {
+  if (rec && rec.state === 'recording') { rec.stop(); return; }
+  if (!active) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    chunks = []; const recorder = new MediaRecorder(stream); rec = recorder;
+    recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+    recorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      $('recBtn').textContent = '🎙';
+      const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+      const r = new FileReader();
+      r.onload = () => sendPayload({ t: 'voice', b: r.result }).catch(showErr);
+      r.readAsDataURL(blob);
+    };
+    recorder.start();
+    $('recBtn').textContent = '⏹';
+    setTimeout(() => { if (recorder.state === 'recording') recorder.stop(); }, 60000);
+  } catch (err) { showErr(err); }
+};
+
+$('openPacket').onclick = async () => {
+  try {
+    const { id, payload } = await openPacket($('packetIn').value);
+    (db.chats[id] = db.chats[id] || []).push({ from: 'them', payload, ts: Date.now() });
+    save(); $('packetIn').value = '';
+    openChat(id);
+  } catch (err) { showErr(err); }
+};
+
+$('copyKey').onclick = () => copyText($('myKey').value, 'Key copied.');
+$('copyPacket').onclick = () => copyText($('packetOut').value, 'Packet copied.');
+$('addContact').onclick = () => addContact().catch(showErr);
+$('newId').onclick = async () => {
+  if (!confirm('Create a new identity? This erases your contacts and chats on this device.')) return;
+  await newIdentity(); refreshKey(); renderContacts();
+};
+$('back').onclick = goHome;
+$('wipe').onclick = () => {
+  if (confirm('Erase all Insight data on this device?')) { localStorage.removeItem(KEY); location.reload(); }
+};
+$('theme').onchange = e => setTheme(e.target.value);
+
+async function init() {
+  if (!db.me) await newIdentity();
+  const t = db.theme || 'black';
+  $('theme').value = t; setTheme(t);
+  refreshKey(); renderContacts();
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+init().catch(showErr);
+</script>
+</body>
+</html>
